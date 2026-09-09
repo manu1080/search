@@ -15,6 +15,7 @@ function query(overrides: Partial<SearchProductsQuery> = {}): SearchProductsQuer
     sort: 'relevance',
     page: 1,
     size: 24,
+    typoTolerant: true,
     ...overrides,
   };
 }
@@ -33,6 +34,26 @@ describe('buildSearchBody', () => {
     expect(match.query).toBe('auriculares');
     expect(match.fields).toContain('name^4');
     expect(match.fuzziness).toBe('AUTO:4,7');
+  });
+
+  it('sin tolerancia a erratas no incluye la clausula difusa', () => {
+    const { exacta, prefijo, conErratas } = clausulas(
+      buildSearchBody(query({ q: 'teclado', typoTolerant: false })),
+    );
+
+    expect(exacta).toBeDefined();
+    expect(prefijo).toBeDefined();
+    expect(conErratas).toBeUndefined();
+  });
+
+  it('con tolerancia a erratas anade la clausula difusa a las demas', () => {
+    const { exacta, prefijo, conErratas } = clausulas(
+      buildSearchBody(query({ q: 'teclado', typoTolerant: true })),
+    );
+
+    expect(exacta).toBeDefined();
+    expect(prefijo).toBeDefined();
+    expect(conErratas).toBeDefined();
   });
 
   it('no corrige erratas en consultas de menos de cuatro letras', () => {
@@ -73,11 +94,18 @@ describe('buildSearchBody', () => {
     expect(exacta.fuzziness).toBeUndefined();
   });
 
-  it('basta con que encaje una de las tres formas de buscar', () => {
+  it('basta con que encaje una de las formas de buscar', () => {
     const bool = (buildSearchBody(query({ q: 'tec' })) as any).query.bool.must[0].bool;
 
     expect(bool.minimum_should_match).toBe(1);
     expect(bool.should).toHaveLength(3);
+  });
+
+  it('en la fase precisa solo compiten la exacta y el prefijo', () => {
+    const bool = (buildSearchBody(query({ q: 'tec', typoTolerant: false })) as any).query.bool
+      .must[0].bool;
+
+    expect(bool.should).toHaveLength(2);
   });
 
   it('traduce las facetas a filtros de keyword', () => {

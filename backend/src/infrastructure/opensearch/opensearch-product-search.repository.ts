@@ -56,6 +56,7 @@ export class OpensearchProductSearchRepository implements ProductSearchRepositor
       page: query.page,
       size: query.size,
       tookMs: body.took,
+      typoTolerant: query.typoTolerant,
       facets: {
         brands: toFacets(body.aggregations?.brands?.buckets),
         categories: toFacets(body.aggregations?.categories?.buckets),

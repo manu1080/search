@@ -32,7 +32,7 @@ export function buildSearchBody(query: SearchProductsQuery): Json {
     track_total_hits: true,
     query: {
       bool: {
-        must: [buildTextQuery(query.q)],
+        must: [buildTextQuery(query.q, query.typoTolerant)],
         filter: filters,
       },
     },
@@ -57,19 +57,22 @@ export function buildSearchBody(query: SearchProductsQuery): Json {
 export const MIN_PREFIX_LENGTH = 3;
 
 /**
- * Consulta de texto. Combina dos formas de encontrar un producto, porque
+ * Consulta de texto. Combina varias formas de encontrar un producto, porque
  * resuelven problemas distintos:
  *
+ * - `best_fields` tal cual: lo que el usuario escribio.
+ * - `phrase_prefix`: trata el ultimo termino como el principio de una palabra,
+ *   que es lo que hace falta mientras todavia esta escribiendo. Solo a partir
+ *   de MIN_PREFIX_LENGTH caracteres: con una o dos letras devolveria
+ *   practicamente el catalogo entero.
  * - `best_fields` con `fuzziness`: tolera erratas sobre palabras completas
  *   ("teclao" encuentra "teclado"), pero no sirve para palabras a medias:
  *   "tec" esta a 4 ediciones de "teclado" y AUTO permite como mucho 2.
- * - `phrase_prefix`: trata el ultimo termino como el principio de una palabra,
- *   que es lo que hace falta mientras el usuario todavia esta escribiendo.
  *
- * El prefijo solo entra a partir de MIN_PREFIX_LENGTH caracteres: con una o dos
- * letras devolveria practicamente el catalogo entero.
+ * La clausula de erratas solo se incluye cuando `typoTolerant` lo pide, es
+ * decir, en el reintento que hace el caso de uso cuando no hubo resultados.
  */
-function buildTextQuery(q: string): Json {
+function buildTextQuery(q: string, typoTolerant: boolean): Json {
   if (!q) return { match_all: {} };
 
   const TEXT_FIELDS = ['name^4', 'brand^2', 'tags^2', 'category', 'description'];
@@ -102,10 +105,10 @@ function buildTextQuery(q: string): Json {
     },
   };
 
-  const should: Json[] = [exacta, conErratas];
+  const should: Json[] = [exacta];
 
   if (q.length >= MIN_PREFIX_LENGTH) {
-    should.splice(1, 0, {
+    should.push({
       multi_match: {
         query: q,
         // Sin `description` (un prefijo suelto ahi genera mucho ruido) y sin
@@ -116,6 +119,8 @@ function buildTextQuery(q: string): Json {
       },
     });
   }
+
+  if (typoTolerant) should.push(conErratas);
 
   return { bool: { should, minimum_should_match: 1 } };
 }

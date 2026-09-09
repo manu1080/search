@@ -91,24 +91,27 @@ Parámetros de `/api/search`: `q`, `brand` (repetible), `category` (repetible), 
 
 ### Cómo se busca el texto
 
-`q` se resuelve con tres cláusulas que compiten, con los boosts escalonados a propósito:
+La búsqueda va en **dos fases**, y la orquesta el caso de uso `SearchProducts`:
 
-| Cláusula | Boost | Para qué sirve |
-|---|---|---|
-| `best_fields` sin fuzziness | 5 | lo que el usuario escribió, tal cual |
-| `phrase_prefix` (desde 3 letras) | 3 | palabras a medias: `tec` → *Teclado* |
-| `best_fields` con `fuzziness: AUTO:4,7` | 1 | erratas: `teclao` → *Teclado* |
+1. **Precisa.** Compiten dos cláusulas: `best_fields` con lo escrito tal cual (boost 5) y, desde
+   3 letras, `phrase_prefix` para palabras a medias (boost 3). `tec` → *Teclado*.
+2. **Con erratas.** Solo si la primera no devolvió **ni un** resultado, se repite añadiendo
+   `best_fields` con `fuzziness: AUTO:4,7` (boost 1). `camra` → *Cámara*.
 
-Prefijo y erratas resuelven problemas distintos y no se sustituyen: `teclao` está a una edición
-de `teclado`, pero `tec` está a cuatro, así que ninguna fuzziness razonable lo alcanza. El orden
-de los boosts importa: sin él, `zapa` devolvería antes *Zara* (a una edición) que *Zapatillas*.
+Corregir erratas siempre metía ruido en las búsquedas que ya funcionaban: `camara` devolvía 15
+productos de los que 9 no tenían nada que ver, `zapa` sacaba *Zara* (a una edición) antes que
+*Zapatillas*, y las cuentas de las facetas salían falseadas. Separándolo en dos fases, toda
+búsqueda que encuentra algo devuelve solo coincidencias reales.
 
-`AUTO:4,7` desactiva la corrección de erratas por debajo de 4 letras. Con el `AUTO` por defecto,
-`tro` admite una edición y arrastra todos los *Pro* del catálogo; en consultas cortas debe mandar
-el prefijo. El prefijo no mira `description` (demasiado ruido) ni `tags` (es `keyword`, y
+Prefijo y erratas no se sustituyen: `teclao` está a una edición de `teclado`, pero `tec` está a
+cuatro, así que ninguna fuzziness razonable lo alcanza. `AUTO:4,7` además no corrige por debajo
+de 4 letras; con el `AUTO` por defecto, `tro` admite una edición y arrastra todos los *Pro* del
+catálogo. El prefijo no mira `description` (demasiado ruido) ni `tags` (es `keyword`, y
 `phrase_prefix` solo admite campos `text`).
 
-Con menos de 3 letras la capa no dice "sin resultados": avisa de que siga escribiendo.
+Cuando los resultados vienen de la segunda fase, la respuesta lo marca con `typoTolerant: true`
+y la capa avisa: *«No hay coincidencias exactas con X. Esto es lo más parecido.»* Con menos de 3
+letras no dice "sin resultados": pide que se siga escribiendo.
 
 ## Formato del CSV
 
@@ -116,6 +119,12 @@ Con menos de 3 letras la capa no dice "sin resultados": avisa de que siga escrib
 sku,name,description,brand,category,price,currency,stock,rating,imageUrl,tags
 SKU-0001,Auriculares Sony,Con cancelación de ruido,Sony,Audio,199.99,EUR,42,4.5,https://…,audio|bluetooth
 ```
+
+Las imágenes del catálogo de ejemplo vienen de [loremflickr](https://loremflickr.com), que
+sirve fotos de Flickr por etiqueta. Cada etiqueta y cada `lock` (que fija qué foto concreta
+devuelve) se revisaron a ojo: con etiquetas genéricas salen falsos amigos —`speaker` da
+oradores, `charger` da coches Dodge y `fan` da aficionados— y un `lock` fuera del conjunto de
+fotos de esa etiqueta devuelve una imagen de relleno sin relación.
 
 Solo `sku`, `name` y `price` son obligatorios; el resto tiene valor por defecto. Se aceptan
 precios con coma decimal, celdas vacías, BOM y finales de línea mezclados. Las filas inválidas
@@ -126,7 +135,7 @@ no abortan la importación: se cuentan y se muestran en la tabla de trabajos.
 ### Unitarios y de integración (Vitest)
 
 ```bash
-make test     # 93 tests de backend + 36 de frontend
+make test     # 102 tests de backend + 36 de frontend
 make lint     # typecheck del backend + eslint del frontend
 ```
 

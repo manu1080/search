@@ -134,6 +134,15 @@ export function SearchLayer({ filters, onChange, onReset, onClose }: SearchLayer
               </Select>
             </div>
             {error && <StatusMessage tone="danger">{error}</StatusMessage>}
+
+            {result && result.typoTolerant && result.total > 0 && (
+              <p
+                role="status"
+                className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-sm text-muted"
+              >
+                No hay coincidencias exactas con «{filters.q}». Esto es lo más parecido.
+              </p>
+            )}
             {loading && !result && <ResultsSkeleton />}
             {result && result.hits.length === 0 && !loading && (
               <div className="grid place-items-center gap-2 rounded-xl border border-dashed border-border py-20 text-center">

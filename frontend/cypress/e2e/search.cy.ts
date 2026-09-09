@@ -159,6 +159,22 @@ describe('Busqueda publica', () => {
     cy.contains('Sin resultados').should('not.exist');
   });
 
+  it('no mezcla resultados por errata cuando la busqueda precisa encuentra algo', () => {
+    cy.searchFor(E2E_BRAND.toLowerCase());
+
+    // Solo los del catalogo de pruebas: si se corrigieran erratas a la vez,
+    // entrarian ademas palabras a una edicion de "zephyra".
+    esperarResultados(E2E_COUNTS.total);
+    cy.contains('No hay coincidencias exactas').should('not.exist');
+  });
+
+  it('cuando no hay coincidencia exacta avisa y ofrece lo mas parecido', () => {
+    cy.searchFor('zephyrx');
+
+    cy.contains('No hay coincidencias exactas con «zephyrx»').should('be.visible');
+    esperarResultados(E2E_COUNTS.total);
+  });
+
   it('avisa cuando no hay resultados y permite reiniciar', () => {
     cy.searchFor('zzzzznoexisteesteproducto');
 

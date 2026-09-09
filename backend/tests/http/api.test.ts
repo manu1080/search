@@ -37,6 +37,7 @@ class StubSearchRepository implements ProductSearchRepository {
       page: query.page,
       size: query.size,
       tookMs: 1,
+      typoTolerant: query.typoTolerant,
       facets: { brands: [], categories: [], price: null },
     };
   }

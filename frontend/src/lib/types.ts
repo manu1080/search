@@ -36,6 +36,8 @@ export interface SearchResult {
   page: number;
   size: number;
   tookMs: number;
+  /** true si no hubo coincidencias exactas y estos resultados salen del reintento con erratas. */
+  typoTolerant: boolean;
   facets: {
     brands: FacetBucket[];
     categories: FacetBucket[];

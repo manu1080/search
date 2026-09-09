@@ -1,6 +1,6 @@
 import type {
   ProductSearchRepository,
-  SearchProductsQuery,
+  SearchProductsInput,
   SearchProductsResult,
 } from './product-search-repository.port.js';
 
@@ -8,18 +8,30 @@ export const MAX_PAGE_SIZE = 60;
 
 /**
  * Caso de uso de búsqueda. Acota página y tamaño antes de tocar el repositorio,
- * de forma que ningun cliente pueda pedir páginas absurdas al motor.
+ * de forma que ningún cliente pueda pedir páginas absurdas al motor.
+ *
+ * Busca en dos fases: primero sin tolerancia a erratas y, solo si no hay ni un
+ * resultado, reintenta admitiéndolas. Corregir erratas siempre añadía ruido a
+ * las búsquedas que ya funcionaban ("camara" devolvía 15 productos de los que
+ * 9 no tenían nada que ver) y falseaba los recuentos de las facetas.
  */
 export class SearchProducts {
   constructor(private readonly repository: ProductSearchRepository) {}
 
-  execute(query: SearchProductsQuery): Promise<SearchProductsResult> {
-    return this.repository.search({
-      ...query,
-      q: query.q.trim(),
-      page: Math.max(1, query.page),
-      size: Math.min(Math.max(1, query.size), MAX_PAGE_SIZE),
-    });
+  async execute(input: SearchProductsInput): Promise<SearchProductsResult> {
+    const query = {
+      ...input,
+      q: input.q.trim(),
+      page: Math.max(1, input.page),
+      size: Math.min(Math.max(1, input.size), MAX_PAGE_SIZE),
+    };
+
+    const preciso = await this.repository.search({ ...query, typoTolerant: false });
+
+    // Sin texto que corregir, el reintento daría exactamente lo mismo.
+    if (preciso.total > 0 || query.q === '') return preciso;
+
+    return this.repository.search({ ...query, typoTolerant: true });
   }
 }
 

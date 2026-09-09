@@ -13,7 +13,15 @@ export interface SearchProductsQuery {
   sort: ProductSort;
   page: number;
   size: number;
+  /**
+   * Si se admiten erratas. Lo decide el caso de uso, no quien llama: primero se
+   * busca sin tolerancia y solo se reintenta con ella si no hubo resultados.
+   */
+  typoTolerant: boolean;
 }
+
+/** Lo que pide quien consulta; la tolerancia a erratas la gobierna el caso de uso. */
+export type SearchProductsInput = Omit<SearchProductsQuery, 'typoTolerant'>;
 
 export interface FacetBucket {
   value: string;
@@ -26,6 +34,8 @@ export interface SearchProductsResult {
   page: number;
   size: number;
   tookMs: number;
+  /** true si estos resultados salieron del reintento tolerante a erratas. */
+  typoTolerant: boolean;
   facets: {
     brands: FacetBucket[];
     categories: FacetBucket[];
