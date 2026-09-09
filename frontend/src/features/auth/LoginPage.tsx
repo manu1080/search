@@ -1,6 +1,6 @@
 import { Button, Card, Input, Label, TextField } from '@heroui/react';
 import { useState, type FormEvent } from 'react';
-import { Link, Navigate, useLocation, useNavigate } from 'react-router';
+import { Link, Navigate, useLocation } from 'react-router';
 import { StatusMessage } from '../../components/StatusMessage';
 import { ApiError } from '../../lib/api-client';
 import { useAuth } from './auth-context';
@@ -8,24 +8,28 @@ import { Text } from '../../components/Text';
 
 export function LoginPage() {
   const { login, status } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState('demo@search.local');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  if (status === 'authenticated') return <Navigate to="/perfil" replace />;
+
+  // ProtectedRoute deja aqui la ruta que se intentaba abrir.
   const destination = (location.state as { from?: string } | null)?.from ?? '/perfil';
+
+  // Una sola salida: en cuanto hay sesion se navega al destino. Si ademas se
+  // navegase desde handleSubmit, las dos redirecciones competirian y ganaria
+  // la de este guard, perdiendo la ruta que el usuario habia pedido.
+  if (status === 'authenticated') return <Navigate to={destination} replace />;
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
       await login(email, password);
-      void navigate(destination, { replace: true });
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'No se ha podido iniciar sesión');
-    } finally {
       setSubmitting(false);
     }
   }

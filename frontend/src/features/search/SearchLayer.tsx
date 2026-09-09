@@ -30,11 +30,29 @@ export function SearchLayer({ filters, onChange, onReset, onClose }: SearchLayer
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     inputRef.current?.focus();
+
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key !== 'Escape') return;
+
+      // Si hay un desplegable abierto (el de orden), Escape es suyo: solo debe
+      // cerrarlo a el.
+      if (document.querySelector('[role="listbox"]')) return;
+
+      // Dentro del buscador con texto, Escape lo vacia; la capa se cierra a la
+      // segunda pulsacion, ya con el campo vacio.
+      const target = event.target;
+      if (target instanceof HTMLInputElement && target.type === 'search' && target.value !== '') {
+        return;
+      }
+
+      onClose();
     };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+
+    // En fase de captura: el campo de busqueda de react-aria consume Escape
+    // para vaciarse y detiene la propagacion, asi que un listener normal en
+    // document nunca llegaria a ejecutarse.
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
   }, [onClose]);
   useEffect(() => {
     const previous = document.body.style.overflow;

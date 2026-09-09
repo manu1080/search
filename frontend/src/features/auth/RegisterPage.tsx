@@ -1,6 +1,6 @@
 import { Button, Card, Input, Label, TextField } from '@heroui/react';
 import { useState, type FormEvent } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router';
+import { Link, Navigate } from 'react-router';
 import { StatusMessage } from '../../components/StatusMessage';
 import { ApiError } from '../../lib/api-client';
 import { useAuth } from './auth-context';
@@ -8,7 +8,6 @@ import { Text } from '../../components/Text';
 
 export function RegisterPage() {
   const { register, status } = useAuth();
-  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,10 +24,9 @@ export function RegisterPage() {
     setSubmitting(true);
     try {
       await register(name, email, password);
-      void navigate('/perfil', { replace: true });
+      // El guard de arriba redirige en cuanto hay sesion.
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'No se ha podido crear la cuenta');
-    } finally {
       setSubmitting(false);
     }
   }

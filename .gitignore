@@ -11,3 +11,11 @@ backend/storage/uploads/*
 backend/prisma/dev.db
 .vite/
 backend/src/generated/
+
+# Cypress
+frontend/cypress/screenshots/
+frontend/cypress/videos/
+frontend/cypress/downloads/
+
+# Artefactos de compilacion incremental de TypeScript
+*.tsbuildinfo

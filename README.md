@@ -102,14 +102,40 @@ no abortan la importación: se cuentan y se muestran en la tabla de trabajos.
 
 ## Tests
 
+### Unitarios y de integración (Vitest)
+
 ```bash
-make test     # 62 tests de backend (vitest) + 18 de frontend
+make test     # 87 tests de backend + 36 de frontend
 make lint     # typecheck del backend + eslint del frontend
 ```
 
-El backend prueba los casos de uso contra puertos falsos, el constructor de consultas de
-OpenSearch, el parser de CSV y las rutas HTTP con `supertest` y repositorios en memoria; nada
-de eso necesita que la infraestructura esté levantada.
+No necesitan que la infraestructura esté levantada. El backend prueba los casos de uso contra
+puertos falsos, el constructor de consultas de OpenSearch, el parser de CSV, los adaptadores de
+JWT/bcrypt/disco y las rutas HTTP con `supertest` y repositorios en memoria. El frontend prueba
+el cliente de la API con `fetch` simulado, el hook de tema y los componentes con Testing Library.
+
+### End to end (Cypress)
+
+Recorren la aplicación real contra el stack completo, así que hay que tenerlo arrancado:
+
+```bash
+make up && make dev     # en una terminal
+make e2e                # en otra (o `make e2e-open` para el modo interactivo)
+```
+
+| Spec | Qué cubre |
+|---|---|
+| `search.cy.ts` | búsqueda abierta, facetas, orden, acentos, URL compartible, capa vacía |
+| `auth.cy.ts` | login, registro, rutas protegidas, persistencia y cierre de sesión |
+| `profile.cy.ts` | edición de perfil y cambio de contraseña |
+| `upload.cy.ts` | ingesta completa: subida → RabbitMQ → worker → producto buscable |
+| `theme.cy.ts` | tema claro/oscuro, persistencia y ausencia de parpadeo |
+
+Las specs de búsqueda siembran su propio catálogo (`sku` con prefijo `E2E-`, marca `Zephyra`)
+directamente en el índice y lo borran al terminar, para que los recuentos no dependan de lo que
+haya indexado. `upload.cy.ts` no siembra nada: es la prueba de que la cadena asíncrona completa
+funciona. Los tests de registro crean usuarios con email único en la base de datos local;
+`make reset` los limpia.
 
 ## Nota sobre `npm audit`
 

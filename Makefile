@@ -1,7 +1,7 @@
 SHELL := /bin/zsh
 .DEFAULT_GOAL := help
 
-.PHONY: help install up down logs reset db-migrate db-seed os-init dev dev-api dev-worker dev-web test lint build
+.PHONY: help install up down logs reset db-migrate db-seed os-init dev dev-api dev-worker dev-web test test-unit e2e e2e-open lint build
 
 help: ## Muestra esta ayuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -54,9 +54,17 @@ dev-worker: ## Solo el worker
 dev-web: ## Solo el frontend
 	cd frontend && npm run dev
 
-test: ## Tests de backend y frontend
+test: ## Tests unitarios de backend y frontend
 	cd backend && npm test
 	cd frontend && npm test
+
+test-unit: test ## Alias de `make test`
+
+e2e: ## Tests end to end con Cypress (requiere `make up` y `make dev`)
+	cd frontend && npm run e2e
+
+e2e-open: ## Abre Cypress en modo interactivo
+	cd frontend && npm run e2e:open
 
 lint: ## Typecheck + lint
 	cd backend && npm run typecheck
