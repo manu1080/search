@@ -4,7 +4,7 @@ import { StatusMessage } from '../../components/StatusMessage';
 import type { SearchFilters, SortOption } from '../../lib/types';
 import { FacetPanel } from './FacetPanel';
 import { ProductCard } from './ProductCard';
-import { PAGE_SIZE, useSearch } from './use-search';
+import { MIN_QUERY_LENGTH, PAGE_SIZE, useSearch } from './use-search';
 import { Text, Title } from '../../components/Text';
 
 const SORT_LABELS: Record<SortOption, string> = {
@@ -62,6 +62,7 @@ export function SearchLayer({ filters, onChange, onReset, onClose }: SearchLayer
     };
   }, []);
   const totalPages = result ? Math.max(1, Math.ceil(result.total / PAGE_SIZE)) : 1;
+  const consultaCorta = filters.q.length > 0 && filters.q.length < MIN_QUERY_LENGTH;
   return (
     <div
       role="dialog"
@@ -136,13 +137,25 @@ export function SearchLayer({ filters, onChange, onReset, onClose }: SearchLayer
             {loading && !result && <ResultsSkeleton />}
             {result && result.hits.length === 0 && !loading && (
               <div className="grid place-items-center gap-2 rounded-xl border border-dashed border-border py-20 text-center">
-                <Title level="h5">Sin resultados</Title>
-                <Text size="sm" tone="muted">
-                  Prueba con otras palabras o quita algun filtro.
-                </Text>
-                <Button variant="secondary" size="sm" onPress={onReset}>
-                  Limpiar filtros
-                </Button>
+                {consultaCorta ? (
+                  <>
+                    <Title level="h5">Sigue escribiendo…</Title>
+                    <Text size="sm" tone="muted">
+                      Con {MIN_QUERY_LENGTH} letras o más buscamos también por el principio de la
+                      palabra.
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Title level="h5">Sin resultados</Title>
+                    <Text size="sm" tone="muted">
+                      Prueba con otras palabras o quita algún filtro.
+                    </Text>
+                    <Button variant="secondary" size="sm" onPress={onReset}>
+                      Limpiar filtros
+                    </Button>
+                  </>
+                )}
               </div>
             )}
             {result && result.hits.length > 0 && (

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { SearchProductsQuery } from '../../src/core/products/product-search-repository.port.js';
-import { buildSearchBody, buildSuggestBody } from '../../src/infrastructure/opensearch/query-builder.js';
+import {
+  buildSearchBody,
+  buildSuggestBody,
+  MIN_PREFIX_LENGTH,
+} from '../../src/infrastructure/opensearch/query-builder.js';
 
 function query(overrides: Partial<SearchProductsQuery> = {}): SearchProductsQuery {
   return {
@@ -24,12 +28,56 @@ describe('buildSearchBody', () => {
   });
 
   it('busca en varios campos con boost y tolerancia a erratas', () => {
-    const body = buildSearchBody(query({ q: 'auriculares' })) as any;
-    const match = body.query.bool.must[0].multi_match;
+    const match = clausulas(buildSearchBody(query({ q: 'auriculares' }))).conErratas;
 
     expect(match.query).toBe('auriculares');
     expect(match.fields).toContain('name^4');
-    expect(match.fuzziness).toBe('AUTO');
+    expect(match.fuzziness).toBe('AUTO:4,7');
+  });
+
+  it('no corrige erratas en consultas de menos de cuatro letras', () => {
+    // AUTO:4,7 evita que "tro" (una edicion) arrastre todos los "Pro" del
+    // catalogo: en consultas cortas la que manda es la clausula de prefijo.
+    const { conErratas } = clausulas(buildSearchBody(query({ q: 'tro' })));
+
+    expect(conErratas.fuzziness).toBe('AUTO:4,7');
+  });
+
+  it('busca tambien por prefijo a partir de tres letras', () => {
+    const { prefijo } = clausulas(buildSearchBody(query({ q: 'tec' })));
+
+    expect(prefijo).toBeDefined();
+    expect(prefijo.query).toBe('tec');
+    expect(prefijo.fields).toContain('name^4');
+  });
+
+  it('no busca por prefijo con menos de tres letras', () => {
+    expect(clausulas(buildSearchBody(query({ q: 'te' }))).prefijo).toBeUndefined();
+    expect(MIN_PREFIX_LENGTH).toBe(3);
+  });
+
+  it('el prefijo no toca la descripcion ni los tags', () => {
+    const { prefijo } = clausulas(buildSearchBody(query({ q: 'tec' })));
+
+    // phrase_prefix solo admite campos text, y un prefijo sobre la descripcion
+    // devuelve demasiado ruido.
+    expect(prefijo.fields).not.toContain('description');
+    expect(prefijo.fields.some((field: string) => field.startsWith('tags'))).toBe(false);
+  });
+
+  it('prioriza la coincidencia exacta, luego el prefijo y por ultimo las erratas', () => {
+    const { exacta, prefijo, conErratas } = clausulas(buildSearchBody(query({ q: 'zapa' })));
+
+    expect(exacta.boost).toBeGreaterThan(prefijo.boost);
+    expect(prefijo.boost).toBeGreaterThan(conErratas.boost);
+    expect(exacta.fuzziness).toBeUndefined();
+  });
+
+  it('basta con que encaje una de las tres formas de buscar', () => {
+    const bool = (buildSearchBody(query({ q: 'tec' })) as any).query.bool.must[0].bool;
+
+    expect(bool.minimum_should_match).toBe(1);
+    expect(bool.should).toHaveLength(3);
   });
 
   it('traduce las facetas a filtros de keyword', () => {
@@ -76,6 +124,18 @@ describe('buildSearchBody', () => {
     expect(Object.keys(body.aggs)).toEqual(['brands', 'categories', 'price_stats']);
   });
 });
+
+/** Separa las tres clausulas de texto para poder afirmar sobre cada una. */
+function clausulas(body: any) {
+  const should: any[] = body.query.bool.must[0].bool.should;
+  const matches = should.map((clause) => clause.multi_match);
+
+  return {
+    exacta: matches.find((m: any) => m.type === 'best_fields' && !m.fuzziness),
+    prefijo: matches.find((m: any) => m.type === 'phrase_prefix'),
+    conErratas: matches.find((m: any) => typeof m.fuzziness === 'string'),
+  };
+}
 
 describe('buildSuggestBody', () => {
   it('no devuelve documentos, solo nombres agregados', () => {

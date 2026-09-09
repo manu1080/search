@@ -130,6 +130,35 @@ describe('Busqueda publica', () => {
     esperarResultados(E2E_COUNTS.total);
   });
 
+  it('encuentra el nombre a medias', () => {
+    cy.searchFor('trom');
+    esperarResultados(E2E_COUNTS.total);
+
+    cy.get('input[type="search"]').clear().type('trombol');
+    esperarResultados(E2E_COUNTS.total);
+  });
+
+  it('busca por el principio de la marca con solo tres letras', () => {
+    cy.searchFor('zep');
+
+    esperarResultados(E2E_COUNTS.total);
+  });
+
+  it('prioriza el prefijo sobre la correccion de erratas', () => {
+    // "zephy" empieza la marca Zephyra; una busqueda por erratas la dejaria
+    // por detras de cualquier palabra a una edicion de distancia.
+    cy.searchFor('zephy');
+
+    cy.get('[data-slot="card"]').first().should('contain.text', 'Trombolino');
+  });
+
+  it('pide seguir escribiendo con menos de tres letras', () => {
+    cy.searchFor('tr');
+
+    cy.contains('Sigue escribiendo').should('be.visible');
+    cy.contains('Sin resultados').should('not.exist');
+  });
+
   it('avisa cuando no hay resultados y permite reiniciar', () => {
     cy.searchFor('zzzzznoexisteesteproducto');
 

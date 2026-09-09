@@ -89,6 +89,27 @@ Parámetros de `/api/search`: `q`, `brand` (repetible), `category` (repetible), 
 `maxPrice`, `minRating`, `inStock`, `sort` (`relevance` \| `price_asc` \| `price_desc` \|
 `rating_desc`), `page`, `size`.
 
+### Cómo se busca el texto
+
+`q` se resuelve con tres cláusulas que compiten, con los boosts escalonados a propósito:
+
+| Cláusula | Boost | Para qué sirve |
+|---|---|---|
+| `best_fields` sin fuzziness | 5 | lo que el usuario escribió, tal cual |
+| `phrase_prefix` (desde 3 letras) | 3 | palabras a medias: `tec` → *Teclado* |
+| `best_fields` con `fuzziness: AUTO:4,7` | 1 | erratas: `teclao` → *Teclado* |
+
+Prefijo y erratas resuelven problemas distintos y no se sustituyen: `teclao` está a una edición
+de `teclado`, pero `tec` está a cuatro, así que ninguna fuzziness razonable lo alcanza. El orden
+de los boosts importa: sin él, `zapa` devolvería antes *Zara* (a una edición) que *Zapatillas*.
+
+`AUTO:4,7` desactiva la corrección de erratas por debajo de 4 letras. Con el `AUTO` por defecto,
+`tro` admite una edición y arrastra todos los *Pro* del catálogo; en consultas cortas debe mandar
+el prefijo. El prefijo no mira `description` (demasiado ruido) ni `tags` (es `keyword`, y
+`phrase_prefix` solo admite campos `text`).
+
+Con menos de 3 letras la capa no dice "sin resultados": avisa de que siga escribiendo.
+
 ## Formato del CSV
 
 ```csv
@@ -105,7 +126,7 @@ no abortan la importación: se cuentan y se muestran en la tabla de trabajos.
 ### Unitarios y de integración (Vitest)
 
 ```bash
-make test     # 87 tests de backend + 36 de frontend
+make test     # 93 tests de backend + 36 de frontend
 make lint     # typecheck del backend + eslint del frontend
 ```
 
@@ -125,7 +146,7 @@ make e2e                # en otra (o `make e2e-open` para el modo interactivo)
 
 | Spec | Qué cubre |
 |---|---|
-| `search.cy.ts` | búsqueda abierta, facetas, orden, acentos, URL compartible, capa vacía |
+| `search.cy.ts` | búsqueda abierta, prefijos, facetas, orden, acentos, URL compartible, capa vacía |
 | `auth.cy.ts` | login, registro, rutas protegidas, persistencia y cierre de sesión |
 | `profile.cy.ts` | edición de perfil y cambio de contraseña |
 | `upload.cy.ts` | ingesta completa: subida → RabbitMQ → worker → producto buscable |

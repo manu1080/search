@@ -26,25 +26,13 @@ export function buildSearchBody(query: SearchProductsQuery): Json {
     });
   }
 
-  const must: Json = query.q
-    ? {
-        multi_match: {
-          query: query.q,
-          fields: ['name^4', 'brand^2', 'tags^2', 'category', 'description'],
-          type: 'best_fields',
-          fuzziness: 'AUTO',
-          operator: 'and',
-        },
-      }
-    : { match_all: {} };
-
   return {
     from: (query.page - 1) * query.size,
     size: query.size,
     track_total_hits: true,
     query: {
       bool: {
-        must: [must],
+        must: [buildTextQuery(query.q)],
         filter: filters,
       },
     },
@@ -63,6 +51,73 @@ export function buildSearchBody(query: SearchProductsQuery): Json {
       price_stats: { stats: { field: 'price' } },
     },
   };
+}
+
+/** A partir de esta longitud se busca tambien por prefijo (ver buildTextQuery). */
+export const MIN_PREFIX_LENGTH = 3;
+
+/**
+ * Consulta de texto. Combina dos formas de encontrar un producto, porque
+ * resuelven problemas distintos:
+ *
+ * - `best_fields` con `fuzziness`: tolera erratas sobre palabras completas
+ *   ("teclao" encuentra "teclado"), pero no sirve para palabras a medias:
+ *   "tec" esta a 4 ediciones de "teclado" y AUTO permite como mucho 2.
+ * - `phrase_prefix`: trata el ultimo termino como el principio de una palabra,
+ *   que es lo que hace falta mientras el usuario todavia esta escribiendo.
+ *
+ * El prefijo solo entra a partir de MIN_PREFIX_LENGTH caracteres: con una o dos
+ * letras devolveria practicamente el catalogo entero.
+ */
+function buildTextQuery(q: string): Json {
+  if (!q) return { match_all: {} };
+
+  const TEXT_FIELDS = ['name^4', 'brand^2', 'tags^2', 'category', 'description'];
+
+  // Los boosts van escalonados a proposito: lo que el usuario escribio tal cual
+  // pesa mas que un prefijo, y un prefijo mas que una correccion de erratas. Sin
+  // esto, escribir "zapa" saca antes "Zara" (a una edicion) que "Zapatillas".
+  const exacta: Json = {
+    multi_match: {
+      query: q,
+      fields: TEXT_FIELDS,
+      type: 'best_fields',
+      operator: 'and',
+      boost: 5,
+    },
+  };
+
+  const conErratas: Json = {
+    multi_match: {
+      query: q,
+      fields: TEXT_FIELDS,
+      type: 'best_fields',
+      // AUTO:4,7 = sin erratas por debajo de 4 letras, una hasta 6 y dos a
+      // partir de 7. Con el AUTO por defecto, "tro" admite una edicion y
+      // arrastra todos los "Pro" del catalogo: en consultas cortas manda el
+      // prefijo, no la correccion.
+      fuzziness: 'AUTO:4,7',
+      operator: 'and',
+      boost: 1,
+    },
+  };
+
+  const should: Json[] = [exacta, conErratas];
+
+  if (q.length >= MIN_PREFIX_LENGTH) {
+    should.splice(1, 0, {
+      multi_match: {
+        query: q,
+        // Sin `description` (un prefijo suelto ahi genera mucho ruido) y sin
+        // `tags`, que es keyword: phrase_prefix solo admite campos text.
+        fields: ['name^4', 'brand^2', 'category'],
+        type: 'phrase_prefix',
+        boost: 3,
+      },
+    });
+  }
+
+  return { bool: { should, minimum_should_match: 1 } };
 }
 
 function buildSort(query: SearchProductsQuery): Json[] {

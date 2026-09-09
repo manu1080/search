@@ -3,6 +3,13 @@ import { api, ApiError } from '../../lib/api-client';
 import type { SearchFilters, SearchResult } from '../../lib/types';
 
 export const PAGE_SIZE = 24;
+
+/**
+ * A partir de aqui el backend busca tambien por prefijo. Con menos letras solo
+ * habria coincidencias exactas, asi que la capa avisa en lugar de decir que no
+ * hay resultados. Debe coincidir con MIN_PREFIX_LENGTH del query-builder.
+ */
+export const MIN_QUERY_LENGTH = 3;
 const DEBOUNCE_MS = 250;
 
 export const emptyFilters: SearchFilters = {
