@@ -1,0 +1,25 @@
+@import "@heroui/react/styles";
+
+/* Tailwind v4 detecta las fuentes desde el CSS que importa "tailwindcss"; como
+   ese import vive dentro de node_modules hay que declarar el codigo propio. */
+@source "../src";
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  /* Resaltado de coincidencias que devuelve OpenSearch: el amarillo por
+     defecto del navegador es ilegible sobre el tema oscuro. */
+  mark {
+    @apply rounded bg-accent-soft px-0.5 text-accent-soft-foreground;
+  }
+}

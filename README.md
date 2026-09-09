@@ -1,2 +1,118 @@
-# search
-Search bar
+# Buscador de productos
+
+Aplicación de ejemplo, 100 % local, de un buscador de e-commerce con ingesta asíncrona de
+catálogos.
+
+- **Parte abierta**: barra de búsqueda sin registro. Consulta un endpoint REST que ataca
+  OpenSearch y presenta los resultados en una capa a pantalla completa con facetas.
+- **Parte privada** (login JWT): perfil editable y subida de CSV. El fichero se guarda en
+  disco, se publica un mensaje en RabbitMQ y un **worker independiente** lo parsea e indexa,
+  actualizando el estado del trabajo en Postgres.
+
+## Arranque
+
+```bash
+make install      # dependencias de backend y frontend
+make up           # postgres + rabbitmq + opensearch (espera a que estén sanos)
+make db-migrate   # esquema de Postgres
+make db-seed      # usuario demo
+make os-init      # índice de productos en OpenSearch
+make dev          # API :4000 + worker + frontend :5173
+```
+
+Abre <http://localhost:5173> y entra con **demo@search.local** / **Demo1234!**.
+
+Para probar la ingesta hay dos ficheros de ejemplo:
+`backend/samples/products.csv` (120 productos válidos) y
+`backend/samples/products-con-errores.csv` (5 válidos + 3 filas inválidas).
+
+`make help` lista el resto de atajos (`down`, `reset`, `test`, `lint`, `build`, `tools`).
+
+## Puertos
+
+| Servicio | Puerto | Notas |
+|---|---|---|
+| Frontend (Vite) | 5173 | proxy de `/api` hacia la API |
+| API | 4000 | Express |
+| Postgres | 5434 | `search` / `search` / db `search` |
+| RabbitMQ | 5672 | panel en <http://localhost:15672> (guest/guest) |
+| OpenSearch | 9200 | seguridad desactivada, un solo nodo |
+| OpenSearch Dashboards | 5601 | opcional: `make tools` |
+
+> Se usa el 5434 para Postgres porque el 5432 y el 5433 suelen estar ocupados por otros
+> proyectos de la máquina.
+
+## Arquitectura
+
+```
+backend/src/
+├─ core/              dominio puro: entidades, casos de uso y puertos (interfaces)
+├─ infrastructure/    adaptadores: Prisma, OpenSearch, RabbitMQ, disco, bcrypt, JWT
+├─ http/              Express: rutas, controladores finos y middleware
+├─ worker/            entrypoint del consumidor de la cola
+└─ container.ts       composition root: único sitio que elige implementaciones
+```
+
+`core` no importa nada de `infrastructure` ni de `http`: los casos de uso dependen solo de
+interfaces, lo que permite probarlos con dobles y cambiar de motor de búsqueda o de cola sin
+tocar la lógica de negocio.
+
+### Flujo de una importación
+
+```
+POST /api/uploads/csv  ──► guarda el fichero + job PENDING ──► publica en RabbitMQ ──► 202
+                                                                      │
+worker  ◄─────────────────────────────────────────────────────────────┘
+  parsea el CSV en streaming ──► bulk index en OpenSearch (_id = sku) ──► job COMPLETED
+```
+
+La indexación es idempotente (el `_id` del documento es el `sku`): volver a subir el mismo
+catálogo actualiza los productos en lugar de duplicarlos. Un mensaje ilegible acaba en la cola
+de descarte `products.csv.import.dlq` en vez de rebotar indefinidamente.
+
+## API
+
+| Método | Ruta | Auth |
+|---|---|---|
+| POST | `/api/auth/register` | — |
+| POST | `/api/auth/login` | — |
+| GET | `/api/auth/me` | JWT |
+| GET/PATCH | `/api/profile` | JWT |
+| PATCH | `/api/profile/password` | JWT |
+| **GET** | **`/api/search`** | **abierto** |
+| GET | `/api/search/suggest` | abierto |
+| POST | `/api/uploads/csv` | JWT |
+| GET | `/api/uploads`, `/api/uploads/:id` | JWT |
+| GET | `/health` | — |
+
+Parámetros de `/api/search`: `q`, `brand` (repetible), `category` (repetible), `minPrice`,
+`maxPrice`, `minRating`, `inStock`, `sort` (`relevance` \| `price_asc` \| `price_desc` \|
+`rating_desc`), `page`, `size`.
+
+## Formato del CSV
+
+```csv
+sku,name,description,brand,category,price,currency,stock,rating,imageUrl,tags
+SKU-0001,Auriculares Sony,Con cancelación de ruido,Sony,Audio,199.99,EUR,42,4.5,https://…,audio|bluetooth
+```
+
+Solo `sku`, `name` y `price` son obligatorios; el resto tiene valor por defecto. Se aceptan
+precios con coma decimal, celdas vacías, BOM y finales de línea mezclados. Las filas inválidas
+no abortan la importación: se cuentan y se muestran en la tabla de trabajos.
+
+## Tests
+
+```bash
+make test     # 62 tests de backend (vitest) + 18 de frontend
+make lint     # typecheck del backend + eslint del frontend
+```
+
+El backend prueba los casos de uso contra puertos falsos, el constructor de consultas de
+OpenSearch, el parser de CSV y las rutas HTTP con `supertest` y repositorios en memoria; nada
+de eso necesita que la infraestructura esté levantada.
+
+## Nota sobre `npm audit`
+
+El backend arrastra 4 avisos *high* que vienen del CLI de Prisma 7 (`mysql2`, `deepmerge-ts`).
+Son dependencias de desarrollo, no llegan al runtime, y no hay versión corregida sin bajar de
+versión mayor de Prisma.

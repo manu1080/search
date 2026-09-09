@@ -1,0 +1,9 @@
+sku,name,description,brand,category,price,currency,stock,rating,imageUrl,tags
+SKU-0001,Auriculares inalámbricos Sony Max 4,Auriculares Bluetooth con cancelación activa de ruido y 30 h de autonomía.,Sony,Audio,299.58,EUR,0,3.3,https://picsum.photos/seed/SKU-0001/600/600,sonido|audio|sony
+SKU-0002,Auriculares inalámbricos Bose Max 2,Auriculares Bluetooth con cancelación activa de ruido y 30 h de autonomía.,Bose,Audio,639.4,EUR,7,3.3,https://picsum.photos/seed/SKU-0002/600/600,bluetooth|sonido|bose
+SKU-0003,Auriculares inalámbricos JBL Pro 5,Auriculares Bluetooth con cancelación activa de ruido y 30 h de autonomía.,JBL,Audio,98.87,EUR,48,3.3,https://picsum.photos/seed/SKU-0003/600/600,sonido|audio|jbl
+SKU-0004,Altavoz portátil Sony Air 2,Altavoz Bluetooth resistente al agua IPX7 con sonido envolvente 360.,Sony,Audio,419.89,EUR,48,3.3,https://picsum.photos/seed/SKU-0004/600/600,audio|sonido|sony
+SKU-0005,Altavoz portátil Bose Studio 4,Altavoz Bluetooth resistente al agua IPX7 con sonido envolvente 360.,Bose,Audio,230.14,EUR,3,4.2,https://picsum.photos/seed/SKU-0005/600/600,sonido|bluetooth|bose
+SKU-9001,,Sin nombre,Sony,Audio,10.00,EUR,5,4.0,https://picsum.photos/seed/x/600/600,audio
+SKU-9002,Precio invalido,desc,Sony,Audio,no-es-un-numero,EUR,5,4.0,https://picsum.photos/seed/y/600/600,audio
+SKU-9003,Rating fuera de rango,desc,Sony,Audio,10.00,EUR,5,9.9,https://picsum.photos/seed/z/600/600,audio
