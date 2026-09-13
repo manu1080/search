@@ -3,8 +3,9 @@
 Aplicación de ejemplo, 100 % local, de un buscador de e-commerce con ingesta asíncrona de
 catálogos.
 
-- **Parte abierta**: barra de búsqueda sin registro. Consulta un endpoint REST que ataca
-  OpenSearch y presenta los resultados en una capa a pantalla completa con facetas.
+- **Parte abierta**: la página principal es el buscador. Sin registro, consulta un endpoint
+  REST que ataca OpenSearch y muestra el catálogo con facetas, orden y paginación; al escribir,
+  los resultados se actualizan en la misma vista.
 - **Parte privada** (login JWT): perfil editable y subida de CSV. El fichero se guarda en
   disco, se publica un mensaje en RabbitMQ y un **worker independiente** lo parsea e indexa,
   actualizando el estado del trabajo en Postgres.
@@ -110,7 +111,7 @@ catálogo. El prefijo no mira `description` (demasiado ruido) ni `tags` (es `key
 `phrase_prefix` solo admite campos `text`).
 
 Cuando los resultados vienen de la segunda fase, la respuesta lo marca con `typoTolerant: true`
-y la capa avisa: *«No hay coincidencias exactas con X. Esto es lo más parecido.»* Con menos de 3
+y la vista avisa: *«No hay coincidencias exactas con X. Esto es lo más parecido.»* Con menos de 3
 letras no dice "sin resultados": pide que se siga escribiendo.
 
 ## Formato del CSV
@@ -155,7 +156,7 @@ make e2e                # en otra (o `make e2e-open` para el modo interactivo)
 
 | Spec | Qué cubre |
 |---|---|
-| `search.cy.ts` | búsqueda abierta, prefijos, facetas, orden, acentos, URL compartible, capa vacía |
+| `search.cy.ts` | página principal, búsqueda en la misma vista, prefijos, facetas, orden, acentos, URL compartible, estado vacío |
 | `auth.cy.ts` | login, registro, rutas protegidas, persistencia y cierre de sesión |
 | `profile.cy.ts` | edición de perfil y cambio de contraseña |
 | `upload.cy.ts` | ingesta completa: subida → RabbitMQ → worker → producto buscable |

@@ -71,12 +71,11 @@ describe('Tema claro y oscuro', () => {
     });
   });
 
-  it('mantiene el tema dentro de la capa de resultados', () => {
+  it('mantiene el tema mientras se busca', () => {
     visitarCon('dark');
 
-    cy.contains('button', 'Busca por nombre, marca o categoría').click();
+    cy.get('input[type="search"]').type('tec');
 
-    cy.get('[role="dialog"]').should('be.visible');
     cy.get('html').should('have.class', 'dark');
   });
 });

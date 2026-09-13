@@ -28,13 +28,27 @@ describe('Busqueda publica', () => {
     cy.visit('/');
   });
 
+  it('la pagina principal es el buscador y muestra el catalogo sin escribir nada', () => {
+    cy.get('input[type="search"]').should('be.visible').and('be.focused');
+    cy.contains(/\d+ productos/).should('exist');
+    cy.get('[data-slot="card"]').should('have.length.at.least', 1);
+  });
+
   it('se puede buscar sin haber iniciado sesion', () => {
-    cy.contains('Búsqueda abierta').should('be.visible');
     cy.contains('button', 'Entrar').should('be.visible');
 
     cy.searchFor(E2E_TERM);
 
     esperarResultados(E2E_COUNTS.total);
+  });
+
+  it('buscar no cambia de vista: la cabecera y el buscador siguen en su sitio', () => {
+    cy.searchFor(E2E_TERM);
+    esperarResultados(E2E_COUNTS.total);
+
+    cy.get('header').should('be.visible');
+    cy.get('input[type="search"]').should('be.visible').and('have.value', E2E_TERM);
+    cy.get('[role="dialog"]').should('not.exist');
   });
 
   it('muestra los datos del producto y resalta lo buscado', () => {
@@ -192,42 +206,14 @@ describe('Busqueda publica', () => {
     esperarResultados(E2E_COUNTS.total);
   });
 
-  it('Escape vacia el buscador y, con el vacio, cierra la capa', () => {
-    cy.searchFor(E2E_TERM);
-    cy.get('[role="dialog"]').should('be.visible');
-
-    // El campo de react-aria consume la primera pulsacion para vaciarse.
-    cy.get('input[type="search"]').type('{esc}');
-    cy.get('input[type="search"]').should('have.value', '');
-    cy.get('[role="dialog"]').should('be.visible');
-
-    cy.get('input[type="search"]').type('{esc}');
-    cy.get('[role="dialog"]').should('not.exist');
-    cy.contains('Encuentra cualquier producto').should('be.visible');
-  });
-
-  it('Escape cierra la capa directamente desde fuera del buscador', () => {
+  it('vaciar el buscador vuelve a mostrar el catalogo completo', () => {
     cy.searchFor(E2E_TERM);
     esperarResultados(E2E_COUNTS.total);
 
-    cy.contains('button', 'Laboratorio').click().type('{esc}');
+    cy.get('input[type="search"]').clear();
 
-    cy.get('[role="dialog"]').should('not.exist');
-  });
-
-  it('cierra la capa con el boton Cerrar', () => {
-    cy.searchFor(E2E_TERM);
-
-    cy.contains('button', 'Cerrar').click();
-
-    cy.get('[role="dialog"]').should('not.exist');
     cy.url().should('not.include', 'q=');
+    cy.get('[data-slot="card"]').should('have.length.at.least', E2E_COUNTS.total + 1);
   });
 
-  it('busca desde los terminos sugeridos de la portada', () => {
-    cy.contains('button', 'Cafetera').click();
-
-    cy.get('[role="dialog"]').should('be.visible');
-    cy.get('input[type="search"]').should('have.value', 'Cafetera');
-  });
 });

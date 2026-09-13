@@ -10,7 +10,7 @@ declare global {
       seedE2eProducts(products?: E2eProduct[]): Chainable<void>;
       /** Borra del indice todo lo que hayan dejado las pruebas. */
       cleanE2eProducts(): Chainable<void>;
-      /** Abre la capa de resultados y escribe una consulta. */
+      /** Escribe una consulta en el buscador de la pagina principal. */
       searchFor(term: string): Chainable<void>;
     }
   }
@@ -68,8 +68,7 @@ Cypress.Commands.add('cleanE2eProducts', () => {
 });
 
 Cypress.Commands.add('searchFor', (term: string) => {
-  cy.contains('button', 'Busca por nombre, marca o categoría').click();
-  cy.get('input[type="search"]').should('be.focused').type(term);
+  cy.get('input[type="search"]').clear().type(term);
 });
 
 export {};
