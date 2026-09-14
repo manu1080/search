@@ -1,0 +1,219 @@
+import { E2E_BRAND, E2E_COUNTS, E2E_TERM } from '../support/products';
+
+/**
+ * Busqueda publica. El catalogo de pruebas se siembra directamente en el indice
+ * para que los recuentos sean deterministas; la ingesta real por la cola se
+ * comprueba en upload.cy.ts.
+ */
+describe('Busqueda publica', () => {
+  /**
+   * Comprueba el resultado por el numero de fichas pintadas y no por la
+   * visibilidad del contador: al hacer clic en una faceta, Cypress desplaza la
+   * columna de resultados y el contador puede quedar fuera del area visible.
+   */
+  function esperarResultados(total: number) {
+    cy.contains(`${total} producto`).should('exist');
+    cy.get('[data-slot="card"]').should('have.length', total);
+  }
+
+  before(() => {
+    cy.seedE2eProducts();
+  });
+
+  after(() => {
+    cy.cleanE2eProducts();
+  });
+
+  beforeEach(() => {
+    cy.visit('/');
+  });
+
+  it('la pagina principal es el buscador y muestra el catalogo sin escribir nada', () => {
+    cy.get('input[type="search"]').should('be.visible').and('be.focused');
+    cy.contains(/\d+ productos/).should('exist');
+    cy.get('[data-slot="card"]').should('have.length.at.least', 1);
+  });
+
+  it('se puede buscar sin haber iniciado sesion', () => {
+    cy.contains('button', 'Entrar').should('be.visible');
+
+    cy.searchFor(E2E_TERM);
+
+    esperarResultados(E2E_COUNTS.total);
+  });
+
+  it('buscar no cambia de vista: la cabecera y el buscador siguen en su sitio', () => {
+    cy.searchFor(E2E_TERM);
+    esperarResultados(E2E_COUNTS.total);
+
+    cy.get('header').should('be.visible');
+    cy.get('input[type="search"]').should('be.visible').and('have.value', E2E_TERM);
+    cy.get('[role="dialog"]').should('not.exist');
+  });
+
+  it('muestra los datos del producto y resalta lo buscado', () => {
+    cy.searchFor(E2E_TERM);
+
+    cy.contains('Trombolino Uno')
+      .closest('[data-slot="card"]')
+      .within(() => {
+        cy.get('mark').should('contain.text', E2E_TERM);
+        // La marca se ve en mayusculas por CSS, pero en el DOM va tal cual.
+        cy.contains(E2E_BRAND).should('exist');
+        cy.contains('10,00').should('exist');
+        cy.contains('4.1').should('exist');
+      });
+  });
+
+  it('marca como agotados los productos sin stock', () => {
+    cy.searchFor(E2E_TERM);
+
+    cy.contains('Trombolino Dos')
+      .closest('[data-slot="card"]')
+      .within(() => {
+        cy.contains('Agotado').should('exist');
+      });
+  });
+
+  it('filtra por categoria desde las facetas', () => {
+    cy.searchFor(E2E_TERM);
+    esperarResultados(E2E_COUNTS.total);
+
+    cy.contains('button', 'Laboratorio').click();
+
+    esperarResultados(E2E_COUNTS.laboratorio);
+    cy.contains('Trombolino Cinco').should('not.exist');
+  });
+
+  it('acumula filtros de marca y categoria', () => {
+    cy.searchFor(E2E_TERM);
+    esperarResultados(E2E_COUNTS.total);
+
+    cy.contains('button', 'Taller').click();
+    cy.contains('button', E2E_BRAND).click();
+
+    esperarResultados(E2E_COUNTS.taller);
+  });
+
+  it('deja quitar todos los filtros de golpe', () => {
+    cy.searchFor(E2E_TERM);
+    cy.contains('button', 'Laboratorio').click();
+    esperarResultados(E2E_COUNTS.laboratorio);
+
+    cy.contains('button', 'Limpiar').click();
+
+    esperarResultados(E2E_COUNTS.total);
+  });
+
+  it('filtra por disponibilidad con el interruptor de stock', () => {
+    cy.searchFor(E2E_TERM);
+    esperarResultados(E2E_COUNTS.total);
+
+    cy.contains('Solo con stock').click();
+
+    esperarResultados(E2E_COUNTS.conStock);
+  });
+
+  it('ordena por precio ascendente', () => {
+    cy.searchFor(E2E_TERM);
+    esperarResultados(E2E_COUNTS.total);
+
+    cy.get('button').contains('Relevancia').click();
+    cy.contains('[role="option"], li', 'Precio: menor a mayor').click();
+
+    cy.get('[data-slot="card"]').first().should('contain.text', 'Trombolino Uno');
+  });
+
+  it('ordena por precio descendente', () => {
+    cy.searchFor(E2E_TERM);
+    esperarResultados(E2E_COUNTS.total);
+
+    cy.get('button').contains('Relevancia').click();
+    cy.contains('[role="option"], li', 'Precio: mayor a menor').click();
+
+    cy.get('[data-slot="card"]').first().should('contain.text', 'Trombolino Seis');
+  });
+
+  it('encuentra igual con acentos y sin ellos', () => {
+    // "Zephyra" solo existe en el catalogo de pruebas, asi que el recuento no
+    // depende de lo que haya indexado el catalogo de demostracion.
+    cy.searchFor('zephyra');
+    esperarResultados(E2E_COUNTS.total);
+
+    cy.get('input[type="search"]').clear().type('zéphyra');
+    esperarResultados(E2E_COUNTS.total);
+  });
+
+  it('encuentra el nombre a medias', () => {
+    cy.searchFor('trom');
+    esperarResultados(E2E_COUNTS.total);
+
+    cy.get('input[type="search"]').clear().type('trombol');
+    esperarResultados(E2E_COUNTS.total);
+  });
+
+  it('busca por el principio de la marca con solo tres letras', () => {
+    cy.searchFor('zep');
+
+    esperarResultados(E2E_COUNTS.total);
+  });
+
+  it('prioriza el prefijo sobre la correccion de erratas', () => {
+    // "zephy" empieza la marca Zephyra; una busqueda por erratas la dejaria
+    // por detras de cualquier palabra a una edicion de distancia.
+    cy.searchFor('zephy');
+
+    cy.get('[data-slot="card"]').first().should('contain.text', 'Trombolino');
+  });
+
+  it('pide seguir escribiendo con menos de tres letras', () => {
+    cy.searchFor('tr');
+
+    cy.contains('Sigue escribiendo').should('be.visible');
+    cy.contains('Sin resultados').should('not.exist');
+  });
+
+  it('no mezcla resultados por errata cuando la busqueda precisa encuentra algo', () => {
+    cy.searchFor(E2E_BRAND.toLowerCase());
+
+    // Solo los del catalogo de pruebas: si se corrigieran erratas a la vez,
+    // entrarian ademas palabras a una edicion de "zephyra".
+    esperarResultados(E2E_COUNTS.total);
+    cy.contains('No hay coincidencias exactas').should('not.exist');
+  });
+
+  it('cuando no hay coincidencia exacta avisa y ofrece lo mas parecido', () => {
+    cy.searchFor('zephyrx');
+
+    cy.contains('No hay coincidencias exactas con «zephyrx»').should('be.visible');
+    esperarResultados(E2E_COUNTS.total);
+  });
+
+  it('avisa cuando no hay resultados y permite reiniciar', () => {
+    cy.searchFor('zzzzznoexisteesteproducto');
+
+    cy.contains('Sin resultados').should('be.visible');
+    cy.contains('button', 'Limpiar filtros').should('be.visible');
+  });
+
+  it('lleva la consulta en la URL para poder compartirla', () => {
+    cy.searchFor(E2E_TERM);
+
+    cy.url().should('include', `q=${E2E_TERM}`);
+
+    cy.visit(`/?q=${E2E_TERM}`);
+    cy.get('input[type="search"]').should('have.value', E2E_TERM);
+    esperarResultados(E2E_COUNTS.total);
+  });
+
+  it('vaciar el buscador vuelve a mostrar el catalogo completo', () => {
+    cy.searchFor(E2E_TERM);
+    esperarResultados(E2E_COUNTS.total);
+
+    cy.get('input[type="search"]').clear();
+
+    cy.url().should('not.include', 'q=');
+    cy.get('[data-slot="card"]').should('have.length.at.least', E2E_COUNTS.total + 1);
+  });
+
+});

@@ -1,0 +1,21 @@
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.local
+*.log
+.DS_Store
+backend/storage/uploads/*
+!backend/storage/uploads/.gitkeep
+backend/prisma/dev.db
+.vite/
+backend/src/generated/
+
+# Cypress
+frontend/cypress/screenshots/
+frontend/cypress/videos/
+frontend/cypress/downloads/
+
+# Artefactos de compilacion incremental de TypeScript
+*.tsbuildinfo

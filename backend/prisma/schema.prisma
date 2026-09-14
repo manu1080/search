@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  bio          String?
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  uploadJobs UploadJob[]
+
+  @@map("users")
+}
+
+enum UploadJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model UploadJob {
+  id           String          @id @default(uuid())
+  userId       String
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originalName String
+  storedPath   String
+  sizeBytes    Int
+  status       UploadJobStatus @default(PENDING)
+  rowsTotal    Int             @default(0)
+  rowsIndexed  Int             @default(0)
+  rowsFailed   Int             @default(0)
+  errors       Json            @default("[]")
+  errorMessage String?
+  createdAt    DateTime        @default(now())
+  startedAt    DateTime?
+  finishedAt   DateTime?
+
+  @@index([userId, createdAt])
+  @@map("upload_jobs")
+}
