@@ -1,175 +1,174 @@
-# Buscador de productos
+# Product Search Engine
 
-Aplicación de ejemplo, 100 % local, de un buscador de e-commerce con ingesta asíncrona de
-catálogos.
+100% local sample application of an e-commerce search engine with asynchronous catalog
+ingestion.
 
-- **Parte abierta**: la página principal es el buscador. Sin registro, consulta un endpoint
-  REST que ataca OpenSearch y muestra el catálogo con facetas, orden y paginación; al escribir,
-  los resultados se actualizan en la misma vista.
-- **Parte privada** (login JWT): perfil editable y subida de CSV. El fichero se guarda en
-  disco, se publica un mensaje en RabbitMQ y un **worker independiente** lo parsea e indexa,
-  actualizando el estado del trabajo en Postgres.
+- **Public part**: the home page is the search engine. No login required, it queries a REST
+  endpoint that hits OpenSearch and shows the catalog with facets, sorting and pagination; as
+  you type, results update in the same view.
+- **Private part** (JWT login): editable profile and CSV upload. The file is saved to disk, a
+  message is published to RabbitMQ, and an **independent worker** parses and indexes it,
+  updating the job status in Postgres.
 
-## Arranque
+## Getting started
 
 ```bash
-make install      # dependencias de backend y frontend
-make up           # postgres + rabbitmq + opensearch (espera a que estén sanos)
-make db-migrate   # esquema de Postgres
-make db-seed      # usuario demo
-make os-init      # índice de productos en OpenSearch
+make install      # backend and frontend dependencies
+make up           # postgres + rabbitmq + opensearch (waits until healthy)
+make db-migrate   # Postgres schema
+make db-seed      # demo user
+make os-init      # products index in OpenSearch
 make dev          # API :4000 + worker + frontend :5173
 ```
 
-Abre <http://localhost:5173> y entra con **demo@search.local** / **Demo1234!**.
+Open <http://localhost:5173> and log in with **demo@search.local** / **Demo1234!**.
 
-Para probar la ingesta hay dos ficheros de ejemplo:
-`backend/samples/products.csv` (120 productos válidos) y
-`backend/samples/products-con-errores.csv` (5 válidos + 3 filas inválidas).
+There are two sample files to try out ingestion:
+`backend/samples/products.csv` (120 valid products) and
+`backend/samples/products-con-errores.csv` (5 valid + 3 invalid rows).
 
-`make help` lista el resto de atajos (`down`, `reset`, `test`, `lint`, `build`, `tools`).
+`make help` lists the rest of the shortcuts (`down`, `reset`, `test`, `lint`, `build`, `tools`).
 
-## Puertos
+## Ports
 
-| Servicio | Puerto | Notas |
+| Service | Port | Notes |
 |---|---|---|
-| Frontend (Vite) | 5173 | proxy de `/api` hacia la API |
+| Frontend (Vite) | 5173 | proxies `/api` to the API |
 | API | 4000 | Express |
 | Postgres | 5434 | `search` / `search` / db `search` |
-| RabbitMQ | 5672 | panel en <http://localhost:15672> (guest/guest) |
-| OpenSearch | 9200 | seguridad desactivada, un solo nodo |
-| OpenSearch Dashboards | 5601 | opcional: `make tools` |
+| RabbitMQ | 5672 | dashboard at <http://localhost:15672> (guest/guest) |
+| OpenSearch | 9200 | security disabled, single node |
+| OpenSearch Dashboards | 5601 | optional: `make tools` |
 
-> Se usa el 5434 para Postgres porque el 5432 y el 5433 suelen estar ocupados por otros
-> proyectos de la máquina.
+> Postgres uses 5434 because 5432 and 5433 are usually taken by other projects on the machine.
 
-## Arquitectura
+## Architecture
 
 ```
 backend/src/
-├─ core/              dominio puro: entidades, casos de uso y puertos (interfaces)
-├─ infrastructure/    adaptadores: Prisma, OpenSearch, RabbitMQ, disco, bcrypt, JWT
-├─ http/              Express: rutas, controladores finos y middleware
-├─ worker/            entrypoint del consumidor de la cola
-└─ container.ts       composition root: único sitio que elige implementaciones
+├─ core/              pure domain: entities, use cases and ports (interfaces)
+├─ infrastructure/    adapters: Prisma, OpenSearch, RabbitMQ, disk, bcrypt, JWT
+├─ http/              Express: routes, thin controllers and middleware
+├─ worker/            queue consumer entrypoint
+└─ container.ts       composition root: the only place that picks implementations
 ```
 
-`core` no importa nada de `infrastructure` ni de `http`: los casos de uso dependen solo de
-interfaces, lo que permite probarlos con dobles y cambiar de motor de búsqueda o de cola sin
-tocar la lógica de negocio.
+`core` imports nothing from `infrastructure` or `http`: use cases depend only on interfaces,
+which makes them testable with doubles and lets the search engine or queue be swapped without
+touching business logic.
 
-### Flujo de una importación
+### Import flow
 
 ```
-POST /api/uploads/csv  ──► guarda el fichero + job PENDING ──► publica en RabbitMQ ──► 202
+POST /api/uploads/csv  ──► saves the file + PENDING job ──► publishes to RabbitMQ ──► 202
                                                                       │
 worker  ◄─────────────────────────────────────────────────────────────┘
-  parsea el CSV en streaming ──► bulk index en OpenSearch (_id = sku) ──► job COMPLETED
+  streams the CSV parse ──► bulk index in OpenSearch (_id = sku) ──► job COMPLETED
 ```
 
-La indexación es idempotente (el `_id` del documento es el `sku`): volver a subir el mismo
-catálogo actualiza los productos en lugar de duplicarlos. Un mensaje ilegible acaba en la cola
-de descarte `products.csv.import.dlq` en vez de rebotar indefinidamente.
+Indexing is idempotent (the document's `_id` is the `sku`): re-uploading the same catalog
+updates the products instead of duplicating them. An unreadable message ends up in the
+`products.csv.import.dlq` dead-letter queue instead of bouncing indefinitely.
 
 ## API
 
-| Método | Ruta | Auth |
+| Method | Route | Auth |
 |---|---|---|
 | POST | `/api/auth/register` | — |
 | POST | `/api/auth/login` | — |
 | GET | `/api/auth/me` | JWT |
 | GET/PATCH | `/api/profile` | JWT |
 | PATCH | `/api/profile/password` | JWT |
-| **GET** | **`/api/search`** | **abierto** |
-| GET | `/api/search/suggest` | abierto |
+| **GET** | **`/api/search`** | **public** |
+| GET | `/api/search/suggest` | public |
 | POST | `/api/uploads/csv` | JWT |
 | GET | `/api/uploads`, `/api/uploads/:id` | JWT |
 | GET | `/health` | — |
 
-Parámetros de `/api/search`: `q`, `brand` (repetible), `category` (repetible), `minPrice`,
+`/api/search` parameters: `q`, `brand` (repeatable), `category` (repeatable), `minPrice`,
 `maxPrice`, `minRating`, `inStock`, `sort` (`relevance` \| `price_asc` \| `price_desc` \|
 `rating_desc`), `page`, `size`.
 
-### Cómo se busca el texto
+### How text search works
 
-La búsqueda va en **dos fases**, y la orquesta el caso de uso `SearchProducts`:
+Search runs in **two phases**, orchestrated by the `SearchProducts` use case:
 
-1. **Precisa.** Compiten dos cláusulas: `best_fields` con lo escrito tal cual (boost 5) y, desde
-   3 letras, `phrase_prefix` para palabras a medias (boost 3). `tec` → *Teclado*.
-2. **Con erratas.** Solo si la primera no devolvió **ni un** resultado, se repite añadiendo
-   `best_fields` con `fuzziness: AUTO:4,7` (boost 1). `camra` → *Cámara*.
+1. **Precise.** Two clauses compete: `best_fields` with the text as typed (boost 5) and, from
+   3 letters on, `phrase_prefix` for partial words (boost 3). `tec` → *Teclado* (Keyboard).
+2. **Typo-tolerant.** Only if the first phase returned **zero** results, it retries adding
+   `best_fields` with `fuzziness: AUTO:4,7` (boost 1). `camra` → *Cámara* (Camera).
 
-Corregir erratas siempre metía ruido en las búsquedas que ya funcionaban: `camara` devolvía 15
-productos de los que 9 no tenían nada que ver, `zapa` sacaba *Zara* (a una edición) antes que
-*Zapatillas*, y las cuentas de las facetas salían falseadas. Separándolo en dos fases, toda
-búsqueda que encuentra algo devuelve solo coincidencias reales.
+Correcting typos always polluted searches that already worked: `camara` returned 15 products,
+9 of which had nothing to do with it, `zapa` surfaced *Zara* (one edit away) before
+*Zapatillas* (Sneakers), and facet counts came out skewed. By splitting it into two phases, any
+search that finds something returns only real matches.
 
-Prefijo y erratas no se sustituyen: `teclao` está a una edición de `teclado`, pero `tec` está a
-cuatro, así que ninguna fuzziness razonable lo alcanza. `AUTO:4,7` además no corrige por debajo
-de 4 letras; con el `AUTO` por defecto, `tro` admite una edición y arrastra todos los *Pro* del
-catálogo. El prefijo no mira `description` (demasiado ruido) ni `tags` (es `keyword`, y
-`phrase_prefix` solo admite campos `text`).
+Prefix and typo-tolerance are not interchangeable: `teclao` is one edit away from `teclado`,
+but `tec` is four edits away, so no reasonable fuzziness reaches it. `AUTO:4,7` also doesn't
+correct below 4 letters; with the default `AUTO`, `tro` allows one edit and pulls in every
+*Pro* in the catalog. The prefix clause doesn't look at `description` (too much noise) or
+`tags` (it's a `keyword` field, and `phrase_prefix` only works on `text` fields).
 
-Cuando los resultados vienen de la segunda fase, la respuesta lo marca con `typoTolerant: true`
-y la vista avisa: *«No hay coincidencias exactas con X. Esto es lo más parecido.»* Con menos de 3
-letras no dice "sin resultados": pide que se siga escribiendo.
+When results come from the second phase, the response flags it with `typoTolerant: true` and
+the UI shows a notice: *"No exact matches for X. Here's the closest we found."* Below 3
+letters it doesn't say "no results": it asks you to keep typing.
 
-## Formato del CSV
+## CSV format
 
 ```csv
 sku,name,description,brand,category,price,currency,stock,rating,imageUrl,tags
-SKU-0001,Auriculares Sony,Con cancelación de ruido,Sony,Audio,199.99,EUR,42,4.5,https://…,audio|bluetooth
+SKU-0001,Sony Headphones,Noise cancelling,Sony,Audio,199.99,EUR,42,4.5,https://…,audio|bluetooth
 ```
 
-Las imágenes del catálogo de ejemplo vienen de [loremflickr](https://loremflickr.com), que
-sirve fotos de Flickr por etiqueta. Cada etiqueta y cada `lock` (que fija qué foto concreta
-devuelve) se revisaron a ojo: con etiquetas genéricas salen falsos amigos —`speaker` da
-oradores, `charger` da coches Dodge y `fan` da aficionados— y un `lock` fuera del conjunto de
-fotos de esa etiqueta devuelve una imagen de relleno sin relación.
+The sample catalog's images come from [loremflickr](https://loremflickr.com), which serves
+Flickr photos by tag. Every tag and every `lock` (which pins down which specific photo comes
+back) were checked by hand: generic tags surface false friends — `speaker` returns public
+speakers, `charger` returns Dodge Chargers, and `fan` returns sports fans — and a `lock`
+outside that tag's photo set returns an unrelated filler image.
 
-Solo `sku`, `name` y `price` son obligatorios; el resto tiene valor por defecto. Se aceptan
-precios con coma decimal, celdas vacías, BOM y finales de línea mezclados. Las filas inválidas
-no abortan la importación: se cuentan y se muestran en la tabla de trabajos.
+Only `sku`, `name` and `price` are required; everything else has a default value. Decimal
+commas, empty cells, a BOM and mixed line endings are all accepted. Invalid rows don't abort
+the import: they're counted and shown in the jobs table.
 
 ## Tests
 
-### Unitarios y de integración (Vitest)
+### Unit and integration (Vitest)
 
 ```bash
-make test     # 102 tests de backend + 36 de frontend
-make lint     # typecheck del backend + eslint del frontend
+make test     # 102 backend tests + 36 frontend tests
+make lint     # backend typecheck + frontend eslint
 ```
 
-No necesitan que la infraestructura esté levantada. El backend prueba los casos de uso contra
-puertos falsos, el constructor de consultas de OpenSearch, el parser de CSV, los adaptadores de
-JWT/bcrypt/disco y las rutas HTTP con `supertest` y repositorios en memoria. El frontend prueba
-el cliente de la API con `fetch` simulado, el hook de tema y los componentes con Testing Library.
+These don't need the infrastructure running. The backend tests the use cases against fake
+ports, the OpenSearch query builder, the CSV parser, the JWT/bcrypt/disk adapters, and the HTTP
+routes with `supertest` and in-memory repositories. The frontend tests the API client with a
+mocked `fetch`, the theme hook, and the components with Testing Library.
 
 ### End to end (Cypress)
 
-Recorren la aplicación real contra el stack completo, así que hay que tenerlo arrancado:
+These walk through the real application against the full stack, so it needs to be running:
 
 ```bash
-make up && make dev     # en una terminal
-make e2e                # en otra (o `make e2e-open` para el modo interactivo)
+make up && make dev     # in one terminal
+make e2e                # in another (or `make e2e-open` for interactive mode)
 ```
 
-| Spec | Qué cubre |
+| Spec | What it covers |
 |---|---|
-| `search.cy.ts` | página principal, búsqueda en la misma vista, prefijos, facetas, orden, acentos, URL compartible, estado vacío |
-| `auth.cy.ts` | login, registro, rutas protegidas, persistencia y cierre de sesión |
-| `profile.cy.ts` | edición de perfil y cambio de contraseña |
-| `upload.cy.ts` | ingesta completa: subida → RabbitMQ → worker → producto buscable |
-| `theme.cy.ts` | tema claro/oscuro, persistencia y ausencia de parpadeo |
+| `search.cy.ts` | home page, in-place search, prefixes, facets, sorting, accents, shareable URL, empty state |
+| `auth.cy.ts` | login, registration, protected routes, persistence and logout |
+| `profile.cy.ts` | profile editing and password change |
+| `upload.cy.ts` | full ingestion: upload → RabbitMQ → worker → searchable product |
+| `theme.cy.ts` | light/dark theme, persistence and no flash |
 
-Las specs de búsqueda siembran su propio catálogo (`sku` con prefijo `E2E-`, marca `Zephyra`)
-directamente en el índice y lo borran al terminar, para que los recuentos no dependan de lo que
-haya indexado. `upload.cy.ts` no siembra nada: es la prueba de que la cadena asíncrona completa
-funciona. Los tests de registro crean usuarios con email único en la base de datos local;
-`make reset` los limpia.
+The search specs seed their own catalog (`sku` prefixed `E2E-`, brand `Zephyra`) directly into
+the index and delete it when done, so counts don't depend on whatever else is indexed.
+`upload.cy.ts` doesn't seed anything: it's the proof that the full async chain works.
+Registration tests create users with a unique email in the local database; `make reset` cleans
+them up.
 
-## Nota sobre `npm audit`
+## Note on `npm audit`
 
-El backend arrastra 4 avisos *high* que vienen del CLI de Prisma 7 (`mysql2`, `deepmerge-ts`).
-Son dependencias de desarrollo, no llegan al runtime, y no hay versión corregida sin bajar de
-versión mayor de Prisma.
+The backend carries 4 *high* advisories coming from the Prisma 7 CLI (`mysql2`,
+`deepmerge-ts`). They're dev dependencies, they don't reach the runtime, and there's no fixed
+version without downgrading Prisma's major version.
